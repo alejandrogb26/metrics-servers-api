@@ -155,6 +155,26 @@ def require_permission(*required: str):
     return _check
 
 
+def visible_section_ids(user: RequestUser, required_perm: str) -> set[int] | None:
+    """
+    Returns the set of section IDs the user can access for the given permission,
+    or None when the user has unrestricted access (superadmin or global perm).
+    An empty set means the user holds no accessible section for that permission.
+
+    Must be called after require_permission() has already resolved the user dependency
+    (which guarantees _global_perms and _section_perms are loaded for non-superadmin users).
+    """
+    if user.superadmin:
+        return None
+    if required_perm in (user._global_perms or []):
+        return None
+    return {
+        sec_id
+        for sec_id, perms in (user._section_perms or {}).items()
+        if required_perm in perms
+    }
+
+
 def _load_perms_if_needed(user: RequestUser, request: Request) -> None:
     """
     Carga los permisos del grupo desde la base de datos si aún no están cargados en el objeto `user`.

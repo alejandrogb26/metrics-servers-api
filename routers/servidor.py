@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, 
 from sqlmodel import Session
 
 from core.database import get_session
-from core.dependencies import RequestUser, require_permission
+from core.dependencies import RequestUser, require_permission, visible_section_ids
 from models.common import BulkResult, CountResult, IdResponse, PagedResponse, UploadResult
 from models.servidor import ServidorCreate, ServidorPatchRequest, ServidorRead
 from services.servidor_service import ServidorService
@@ -17,10 +17,11 @@ def find_all(
     page: int = Query(default=0, ge=0, description="Página (base 0)"),
     size: int = Query(default=20, ge=1, le=100, description="Elementos por página"),
     session: Session = Depends(get_session),
-    _user: Annotated[RequestUser, Depends(require_permission("AUDIT_SERV"))] = None,  # type: ignore[assignment]
+    user: Annotated[RequestUser, Depends(require_permission("AUDIT_SERV"))] = None,  # type: ignore[assignment]
 ):
     svc = ServidorService(session)
-    items, total = svc.find_all(page=page, size=size)
+    section_ids = visible_section_ids(user, "AUDIT_SERV")
+    items, total = svc.find_all(page=page, size=size, section_ids=section_ids)
     return PagedResponse(data=items, page=page, size=size, total=total)
 
 
@@ -28,10 +29,11 @@ def find_all(
 def find_by_id(
     servidor_id: int,
     session: Session = Depends(get_session),
-    _user: Annotated[RequestUser, Depends(require_permission("AUDIT_SERV"))] = None,  # type: ignore[assignment]
+    user: Annotated[RequestUser, Depends(require_permission("AUDIT_SERV"))] = None,  # type: ignore[assignment]
 ):
     svc = ServidorService(session)
-    result = svc.find_by_id(servidor_id)
+    section_ids = visible_section_ids(user, "AUDIT_SERV")
+    result = svc.find_by_id(servidor_id, section_ids=section_ids)
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Servidor no encontrado")
     return result
@@ -41,8 +43,11 @@ def find_by_id(
 def create(
     dto: ServidorCreate,
     session: Session = Depends(get_session),
-    _user: Annotated[RequestUser, Depends(require_permission("MODIFY_SERV"))] = None,  # type: ignore[assignment]
+    user: Annotated[RequestUser, Depends(require_permission("MODIFY_SERV"))] = None,  # type: ignore[assignment]
 ):
+    section_ids = visible_section_ids(user, "MODIFY_SERV")
+    if section_ids is not None and dto.seccion_id not in section_ids:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Servidor no encontrado")
     svc = ServidorService(session)
     return svc.insert(dto)
 
@@ -51,10 +56,18 @@ def create(
 def create_bulk(
     servidores: list[ServidorCreate],
     session: Session = Depends(get_session),
-    _user: Annotated[RequestUser, Depends(require_permission("MODIFY_SERV"))] = None,  # type: ignore[assignment]
+    user: Annotated[RequestUser, Depends(require_permission("MODIFY_SERV"))] = None,  # type: ignore[assignment]
 ):
     if not servidores:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Lista vacía")
+    section_ids = visible_section_ids(user, "MODIFY_SERV")
+    if section_ids is not None:
+        unauthorized = [s.server_id for s in servidores if s.seccion_id not in section_ids]
+        if unauthorized:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Sección no encontrada para: {', '.join(unauthorized)}",
+            )
     svc = ServidorService(session)
     result = svc.insert_bulk(servidores)
     status_code = status.HTTP_201_CREATED if result.failed == 0 else 207
@@ -67,10 +80,11 @@ def patch_servidor(
     servidor_id: int,
     patch: ServidorPatchRequest,
     session: Session = Depends(get_session),
-    _user: Annotated[RequestUser, Depends(require_permission("MODIFY_SERV"))] = None,  # type: ignore[assignment]
+    user: Annotated[RequestUser, Depends(require_permission("MODIFY_SERV"))] = None,  # type: ignore[assignment]
 ):
     svc = ServidorService(session)
-    if not svc.update(servidor_id, patch):
+    section_ids = visible_section_ids(user, "MODIFY_SERV")
+    if not svc.update(servidor_id, patch, section_ids=section_ids):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Servidor no encontrado")
 
 
@@ -82,10 +96,11 @@ def patch_servidor(
 def delete_servidor(
     servidor_id: int,
     session: Session = Depends(get_session),
-    _user: Annotated[RequestUser, Depends(require_permission("MODIFY_SERV"))] = None,  # type: ignore[assignment]
+    user: Annotated[RequestUser, Depends(require_permission("MODIFY_SERV"))] = None,  # type: ignore[assignment]
 ):
     svc = ServidorService(session)
-    if not svc.delete(servidor_id):
+    section_ids = visible_section_ids(user, "MODIFY_SERV")
+    if not svc.delete(servidor_id, section_ids=section_ids):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Servidor no encontrado")
 
 
@@ -93,7 +108,7 @@ def delete_servidor(
 def delete_bulk(
     ids: list[int],
     session: Session = Depends(get_session),
-    _user: Annotated[RequestUser, Depends(require_permission("MODIFY_SERV"))] = None,  # type: ignore[assignment]
+    user: Annotated[RequestUser, Depends(require_permission("MODIFY_SERV"))] = None,  # type: ignore[assignment]
 ):
     """
     Elimina múltiples servidores.
@@ -102,7 +117,8 @@ def delete_bulk(
     if not ids:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Lista vacía")
     svc = ServidorService(session)
-    return svc.delete_bulk(ids)
+    section_ids = visible_section_ids(user, "MODIFY_SERV")
+    return svc.delete_bulk(ids, section_ids=section_ids)
 
 
 # ── Servicios asociados ────────────────────────────────────────────────────────
@@ -114,11 +130,12 @@ def add_servicios(
     servidor_id: int,
     servicio_ids: list[int],
     session: Session = Depends(get_session),
-    _user: Annotated[RequestUser, Depends(require_permission("MODIFY_SERV"))] = None,  # type: ignore[assignment]
+    user: Annotated[RequestUser, Depends(require_permission("MODIFY_SERV"))] = None,  # type: ignore[assignment]
 ):
     """Asocia servicios a un servidor. Body: lista de IDs de servicio."""
     svc = ServidorService(session)
-    added = svc.add_servicios(servidor_id, servicio_ids)
+    section_ids = visible_section_ids(user, "MODIFY_SERV")
+    added = svc.add_servicios(servidor_id, servicio_ids, section_ids=section_ids)
     if added is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Servidor no encontrado")
     return CountResult(count=added)
@@ -129,14 +146,15 @@ def remove_servicios(
     servidor_id: int,
     ids: list[int] = Query(description="IDs de servicios a desasociar"),
     session: Session = Depends(get_session),
-    _user: Annotated[RequestUser, Depends(require_permission("MODIFY_SERV"))] = None,  # type: ignore[assignment]
+    user: Annotated[RequestUser, Depends(require_permission("MODIFY_SERV"))] = None,  # type: ignore[assignment]
 ):
     """
     Desasocia servicios de un servidor.
     Query params: ?ids=1&ids=2&ids=3
     """
     svc = ServidorService(session)
-    removed = svc.remove_servicios(servidor_id, ids)
+    section_ids = visible_section_ids(user, "MODIFY_SERV")
+    removed = svc.remove_servicios(servidor_id, ids, section_ids=section_ids)
     if removed is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Servidor no encontrado")
     return CountResult(count=removed)
@@ -149,10 +167,11 @@ async def upload_foto(
     servidor_id: int,
     file: UploadFile = File(...),
     session: Session = Depends(get_session),
-    _user: Annotated[RequestUser, Depends(require_permission("MODIFY_SERV"))] = None,  # type: ignore[assignment]
+    user: Annotated[RequestUser, Depends(require_permission("MODIFY_SERV"))] = None,  # type: ignore[assignment]
 ):
     svc = ServidorService(session)
-    servidor = svc.find_by_id(servidor_id)
+    section_ids = visible_section_ids(user, "MODIFY_SERV")
+    servidor = svc.find_by_id(servidor_id, section_ids=section_ids)
     if servidor is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Servidor no encontrado")
     if not file.filename:
@@ -170,14 +189,15 @@ def get_metrics(
     server_id: str,
     minutes: int = Query(default=60, ge=1, le=1440, description="Minutos hacia atrás (máx. 24 h)"),
     session: Session = Depends(get_session),
-    _user: Annotated[RequestUser, Depends(require_permission("AUDIT_SERV"))] = None,  # type: ignore[assignment]
+    user: Annotated[RequestUser, Depends(require_permission("AUDIT_SERV"))] = None,  # type: ignore[assignment]
 ):
     """
     Devuelve métricas del servidor en los últimos N minutos.
     Retorna lista vacía (200) si no hay datos en el intervalo.
     """
     svc = ServidorService(session)
-    result = svc.get_metrics(server_id, minutes)
+    section_ids = visible_section_ids(user, "AUDIT_SERV")
+    result = svc.get_metrics(server_id, minutes, section_ids=section_ids)
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Servidor no encontrado")
     return result

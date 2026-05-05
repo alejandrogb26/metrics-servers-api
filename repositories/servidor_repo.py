@@ -19,16 +19,24 @@ class ServidorRepository:
         read.servicios = servicios_map.get(servidor_id, [])
         return read
 
-    def find_all(self, offset: int, limit: int) -> tuple[list[ServidorRead], int]:
+    def find_all(
+        self, offset: int, limit: int, section_ids: set[int] | None = None
+    ) -> tuple[list[ServidorRead], int]:
+        # Guard: empty section set means no accessible sections → short-circuit.
+        if section_ids is not None and not section_ids:
+            return [], 0
+
         # COUNT(*) y SELECT LIMIT/OFFSET son dos queries separadas: un INSERT/DELETE
         # concurrente entre ellas puede hacer que `total` no coincida exactamente con
         # len(items). Trade-off aceptable para paginación de lectura sin escritura muy alta.
-        total: int = self.session.exec(select(func.count()).select_from(Servidor)).one()
-        items = list(
-            self.session.exec(
-                select(Servidor).order_by(Servidor.id).offset(offset).limit(limit)
-            ).all()
-        )
+        count_stmt = select(func.count()).select_from(Servidor)
+        data_stmt = select(Servidor).order_by(Servidor.id).offset(offset).limit(limit)
+        if section_ids is not None:
+            count_stmt = count_stmt.where(Servidor.seccion_id.in_(section_ids))
+            data_stmt = data_stmt.where(Servidor.seccion_id.in_(section_ids))
+
+        total: int = self.session.exec(count_stmt).one()
+        items = list(self.session.exec(data_stmt).all())
         if not items:
             return [], total
         ids = [s.id for s in items]
@@ -43,6 +51,16 @@ class ServidorRepository:
     def find_server_id_by_id(self, servidor_id: int) -> str | None:
         srv = self.session.get(Servidor, servidor_id)
         return srv.server_id if srv else None
+
+    def find_seccion_id_by_id(self, servidor_id: int) -> int | None:
+        srv = self.session.get(Servidor, servidor_id)
+        return srv.seccion_id if srv else None
+
+    def find_seccion_id_by_server_id(self, server_id: str) -> int | None:
+        srv = self.session.exec(
+            select(Servidor).where(Servidor.server_id == server_id)
+        ).first()
+        return srv.seccion_id if srv else None
 
     def find_imagen_by_id(self, servidor_id: int) -> str | None:
         srv = self.session.get(Servidor, servidor_id)

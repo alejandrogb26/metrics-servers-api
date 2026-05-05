@@ -25,15 +25,24 @@ class ServidorService:
 
     # ── Consultas ──────────────────────────────────────────────────────────────
 
-    def find_by_id(self, servidor_id: int) -> ServidorRead | None:
+    def find_by_id(
+        self, servidor_id: int, section_ids: set[int] | None = None
+    ) -> ServidorRead | None:
         servidor = self._repo.find_by_id(servidor_id)
-        if servidor:
-            self._resolve_imagen_url(servidor)
+        if servidor is None:
+            return None
+        if section_ids is not None and servidor.seccion_id not in section_ids:
+            return None  # treated as not-found to avoid revealing existence
+        self._resolve_imagen_url(servidor)
         return servidor
 
-    def find_all(self, page: int, size: int) -> tuple[list[ServidorRead], int]:
+    def find_all(
+        self, page: int, size: int, section_ids: set[int] | None = None
+    ) -> tuple[list[ServidorRead], int]:
         offset = page * size
-        servidores, total = self._repo.find_all(offset=offset, limit=size)
+        servidores, total = self._repo.find_all(
+            offset=offset, limit=size, section_ids=section_ids
+        )
         for s in servidores:
             self._resolve_imagen_url(s)
         return servidores, total
@@ -105,7 +114,17 @@ class ServidorService:
 
     # ── Modificación ───────────────────────────────────────────────────────────
 
-    def update(self, servidor_id: int, patch: ServidorPatchRequest) -> bool:
+    def update(
+        self, servidor_id: int, patch: ServidorPatchRequest, section_ids: set[int] | None = None
+    ) -> bool:
+        if section_ids is not None:
+            current_seccion = self._repo.find_seccion_id_by_id(servidor_id)
+            if current_seccion is None or current_seccion not in section_ids:
+                return False
+            # Prevent moving a server to a section the caller cannot access.
+            if patch.seccion_id is not None and patch.seccion_id not in section_ids:
+                return False
+
         old_server_id: str | None = None
         if patch.server_id is not None:
             old_server_id = self._repo.find_server_id_by_id(servidor_id)
@@ -136,34 +155,63 @@ class ServidorService:
 
         return updated
 
-    def delete(self, servidor_id: int) -> bool:
+    def delete(self, servidor_id: int, section_ids: set[int] | None = None) -> bool:
+        if section_ids is not None:
+            current_seccion = self._repo.find_seccion_id_by_id(servidor_id)
+            if current_seccion is None or current_seccion not in section_ids:
+                return False
         server_id = self._repo.find_server_id_by_id(servidor_id)
         deleted = self._repo.delete(servidor_id)
         if deleted and server_id:
             self._mongo.delete_by_server_id(server_id)
         return deleted
 
-    def delete_bulk(self, ids: list[int]) -> BulkResult:
+    def delete_bulk(self, ids: list[int], section_ids: set[int] | None = None) -> BulkResult:
         found = self._repo.find_by_ids(ids)
-        found_id_set = {s.id for s in found}
-        missing = [i for i in ids if i not in found_id_set]
+        found_map = {s.id: s for s in found}
 
-        deleted_count = self._repo.delete_bulk(ids)
-        for s in found:
+        not_found = [i for i in ids if i not in found_map]
+
+        if section_ids is not None:
+            accessible = [s for s in found if s.seccion_id in section_ids]
+            # Inaccessible servers are reported as not-found (no 403 leak).
+            not_authorized = [s.id for s in found if s.seccion_id not in section_ids]
+        else:
+            accessible = found
+            not_authorized = []
+
+        accessible_ids = [s.id for s in accessible]
+        deleted_count = self._repo.delete_bulk(accessible_ids) if accessible_ids else 0
+        for s in accessible:
             self._mongo.delete_by_server_id(s.server_id)
 
-        errors = [f"ID {i} no encontrado" for i in missing]
-        return BulkResult(total=len(ids), ok=deleted_count, failed=len(missing), errors=errors)
+        failed_ids = not_found + not_authorized
+        errors = [f"ID {i} no encontrado" for i in failed_ids]
+        return BulkResult(
+            total=len(ids), ok=deleted_count, failed=len(failed_ids), errors=errors
+        )
 
     # ── Servicios asociados ────────────────────────────────────────────────────
 
-    def add_servicios(self, servidor_id: int, servicio_ids: list[int]) -> int | None:
-        if not self._repo.exists(servidor_id):
+    def add_servicios(
+        self, servidor_id: int, servicio_ids: list[int], section_ids: set[int] | None = None
+    ) -> int | None:
+        if section_ids is not None:
+            current_seccion = self._repo.find_seccion_id_by_id(servidor_id)
+            if current_seccion is None or current_seccion not in section_ids:
+                return None
+        elif not self._repo.exists(servidor_id):
             return None
         return self._repo.add_servicios(servidor_id, servicio_ids)
 
-    def remove_servicios(self, servidor_id: int, servicio_ids: list[int]) -> int | None:
-        if not self._repo.exists(servidor_id):
+    def remove_servicios(
+        self, servidor_id: int, servicio_ids: list[int], section_ids: set[int] | None = None
+    ) -> int | None:
+        if section_ids is not None:
+            current_seccion = self._repo.find_seccion_id_by_id(servidor_id)
+            if current_seccion is None or current_seccion not in section_ids:
+                return None
+        elif not self._repo.exists(servidor_id):
             return None
         return self._repo.remove_servicios(servidor_id, servicio_ids)
 
@@ -189,9 +237,14 @@ class ServidorService:
 
     # ── Métricas ───────────────────────────────────────────────────────────────
 
-    def get_metrics(self, server_id: str, minutes: int = 60) -> list[dict] | None:
-        if not self._repo.exists_by_server_id(server_id):
+    def get_metrics(
+        self, server_id: str, minutes: int = 60, section_ids: set[int] | None = None
+    ) -> list[dict] | None:
+        seccion_id = self._repo.find_seccion_id_by_server_id(server_id)
+        if seccion_id is None:
             return None
+        if section_ids is not None and seccion_id not in section_ids:
+            return None  # treated as not-found
         return self._mongo.get_metrics(server_id, minutes)
 
     # ── Helpers ────────────────────────────────────────────────────────────────
