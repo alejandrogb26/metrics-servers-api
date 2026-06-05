@@ -3,12 +3,14 @@ metrics-servers — API de monitorización de servidores
 Python 3.12+ · FastAPI · SQLModel · MariaDB · MongoDB · MinIO · LDAP
 """
 
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from core.config import get_settings
+from core.logging_config import setup_logging
 from exceptions.handlers import register_exception_handlers
 from routers import (
     ambito,
@@ -23,30 +25,40 @@ from routers import (
     usuario,
 )
 
+# ── Logging ───────────────────────────────────────────────────────────────────
+# Se inicializa antes de crear la app para que el lifespan ya use el logger.
+
+_settings = get_settings()
+setup_logging(debug=_settings.app_debug)
+
+log = logging.getLogger("api.main")
+
 
 # ── Lifespan (startup / shutdown) ─────────────────────────────────────────────
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: verificar conexión a BD (opcional, no bloquea si falla)
+    log.info("Arrancando Metrics Servers API [debug=%s]", _settings.app_debug)
+
     try:
         from core.database import engine
         from sqlalchemy import text
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
-        print("[DB] Conexión a MariaDB OK")
+        log.info("[DB] Conexión a MariaDB OK")
     except Exception as exc:
-        print(f"[DB] Advertencia: no se pudo conectar a MariaDB al inicio: {exc}")
+        log.warning("[DB] No se pudo conectar a MariaDB al inicio: %s", exc)
 
-    yield  # aquí corre la aplicación
+    yield
 
-    # Shutdown: cerrar cliente MongoDB
     try:
         from core.mongo import get_mongo_client
         get_mongo_client().close()
-        print("[MongoDB] Conexión cerrada")
+        log.info("[MongoDB] Conexión cerrada")
     except Exception:
         pass
+
+    log.info("API detenida")
 
 
 # ── Aplicación ────────────────────────────────────────────────────────────────
@@ -58,12 +70,18 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# ── Middleware de logging HTTP ────────────────────────────────────────────────
+# Se añade ANTES de CORS para medir el tiempo total de la request incluyendo
+# el procesamiento de preflight.
+
+from core.debug_middleware import DebugLoggingMiddleware  # noqa: E402
+app.add_middleware(DebugLoggingMiddleware)
+
 # ── CORS ──────────────────────────────────────────────────────────────────────
 # allow_credentials=True es incompatible con allow_origins=["*"] (spec CORS).
 # El wildcard sólo se admite sin credenciales. Con orígenes explícitos se activan
 # las credenciales para que los clientes web puedan enviar el header Authorization.
 
-_settings = get_settings()
 _origins = _settings.cors_origins
 _credentials = _origins != ["*"]
 

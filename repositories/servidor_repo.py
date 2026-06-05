@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 from sqlalchemy import delete, func, insert
 from sqlmodel import Session, select
 
 from models.servidor import Servidor, ServidorCreate, ServidorPatch, ServidorRead, ServidorServicio
+from services.ssh_probe_service import ServidorInfo
 
 
 class ServidorRepository:
@@ -81,12 +84,16 @@ class ServidorRepository:
 
     # ── Escritura ──────────────────────────────────────────────────────────────
 
-    def insert(self, data: ServidorCreate) -> int:
+    def insert(self, data: ServidorCreate, probe: ServidorInfo) -> int:
         try:
             srv = Servidor(
                 server_id=data.server_id,
                 dns=data.dns,
                 seccion_id=data.seccion_id,
+                hostname=probe.hostname,
+                pretty_os=probe.pretty_os,
+                arch=probe.arch,
+                kernel=probe.kernel,
             )
             self.session.add(srv)
             self.session.flush()

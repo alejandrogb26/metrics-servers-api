@@ -4,16 +4,20 @@ Equivalente a ServidorService.java.
 """
 
 import concurrent.futures
+import logging
 import time
 from sqlmodel import Session
 
 from core.mongo import get_mongo_db
+from exceptions.errors import ProbeException
 from models.common import BulkResult
 from models.servidor import ServidorCreate, ServidorPatch, ServidorPatchRequest, ServidorRead
 from repositories.mongo_repo import MongoRepository
 from repositories.servidor_repo import ServidorRepository
 from services.minio_service import MinioService
 from services.ssh_probe_service import ServidorInfo, SshProbeService
+
+_log = logging.getLogger(__name__)
 
 
 class ServidorService:
@@ -50,19 +54,19 @@ class ServidorService:
     # ── Creación ───────────────────────────────────────────────────────────────
 
     def insert(self, dto: ServidorCreate) -> ServidorRead:
-        # Insert first: if DB raises IntegrityError (duplicate), no SSH time wasted.
-        srv_id = self._repo.insert(dto)
         try:
             info = self._probe.ask_server(dto.dns)
-            if info:
-                self._repo.update(srv_id, ServidorPatch(
-                    hostname=info.hostname,
-                    pretty_os=info.pretty_os,
-                    arch=info.arch,
-                    kernel=info.kernel,
-                ))
-        except Exception:
-            pass
+        except Exception as exc:
+            _log.warning("SSH probe fallido para '%s' (%s): %s", dto.server_id, dto.dns, exc)
+            raise ProbeException(
+                f"No se pudieron obtener datos SSH obligatorios para '{dto.server_id}'"
+                " (hostname/prettyOs/arch/kernel)"
+            ) from exc
+        _log.debug(
+            "SSH probe OK para '%s': hostname=%s os=%s arch=%s kernel=%s",
+            dto.server_id, info.hostname, info.pretty_os, info.arch, info.kernel,
+        )
+        srv_id = self._repo.insert(dto, info)
         servidor = self._repo.find_by_id(srv_id)
         self._resolve_imagen_url(servidor)
         return servidor
@@ -82,16 +86,17 @@ class ServidorService:
         # Fase 2: inserts secuenciales en la BD (el driver SQL no es thread-safe).
         result = BulkResult(total=len(items))
         for dto in items:
+            info = probe_map.get(dto.dns)
+            _log.debug("SSH probe para '%s': %s", dto.server_id, "OK" if info else "FALLIDO")
+            if info is None:
+                result.failed += 1
+                result.errors.append(
+                    f"{dto.server_id}: no se pudieron obtener datos SSH obligatorios"
+                    " (hostname/prettyOs/arch/kernel)"
+                )
+                continue
             try:
-                srv_id = self._repo.insert(dto)
-                info = probe_map.get(dto.dns)
-                if info:
-                    self._repo.update(srv_id, ServidorPatch(
-                        hostname=info.hostname,
-                        pretty_os=info.pretty_os,
-                        arch=info.arch,
-                        kernel=info.kernel,
-                    ))
+                self._repo.insert(dto, info)
                 result.ok += 1
             except Exception as exc:
                 result.failed += 1
@@ -108,7 +113,8 @@ class ServidorService:
                 dns = futures[future]
                 try:
                     probe_map[dns] = future.result()
-                except Exception:
+                except Exception as exc:
+                    _log.debug("SSH probe fallido para %s: %s", dns, exc)
                     probe_map[dns] = None
         return probe_map
 

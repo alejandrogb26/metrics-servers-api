@@ -55,7 +55,11 @@ def update(
     _user: Annotated[RequestUser, Depends(require_permission("MODIFY_USER"))] = None,  # type: ignore[assignment]
 ):
     svc = GrupoService(session)
-    if not svc.patch(grupo_id, patch):
+    try:
+        found = svc.patch(grupo_id, patch)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+    if not found:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grupo no encontrado")
     return svc.get_by_id(grupo_id)
 

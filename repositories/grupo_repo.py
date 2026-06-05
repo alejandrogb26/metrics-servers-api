@@ -88,6 +88,8 @@ class GrupoRepository:
         try:
             if patch.nombre is not None:
                 grupo.nombre = patch.nombre
+            if "dn" in patch.model_fields_set:
+                grupo.dn = patch.dn  # None borra el DN
             self.session.add(grupo)
             self.session.commit()
             return True

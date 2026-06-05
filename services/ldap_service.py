@@ -3,6 +3,7 @@ Servicio de autenticación LDAP contra Active Directory.
 Equivalente a LdapAuthService.java.
 """
 
+import logging
 import re
 from dataclasses import dataclass
 
@@ -18,6 +19,8 @@ from ldap3 import (
 from ldap3.core.exceptions import LDAPException
 
 from core.config import get_settings
+
+log = logging.getLogger("api.ldap")
 
 
 @dataclass
@@ -43,6 +46,7 @@ class LdapService:
         if not username or not password:
             return None
         principal = self._build_upn(username)
+        log.debug("LDAP authenticate principal=%s ldap_url=%s", principal, self._ldap_url)
         if not self._can_bind(principal, password):
             return None
         return self._load_user(username.strip())
@@ -52,6 +56,7 @@ class LdapService:
     def dn_exists(self, dn: str) -> bool:
         if not dn:
             return False
+        log.debug("LDAP dn_exists dn=%s", dn)
         try:
             with self._service_connection() as conn:
                 conn.search(
@@ -61,9 +66,11 @@ class LdapService:
                     attributes=["distinguishedName"],
                     size_limit=1,
                 )
-                return bool(conn.entries)
+                exists = bool(conn.entries)
+                log.debug("LDAP dn_exists result=%s dn=%s", exists, dn)
+                return exists
         except LDAPException as exc:
-            print(f"[LDAP] dnExists KO para DN: {dn} -> {exc}")
+            log.warning("LDAP dn_exists error dn=%s: %s", dn, exc)
             return False
 
     # ── Helpers internos ───────────────────────────────────────────────────────
@@ -78,12 +85,14 @@ class LdapService:
                 authentication=SIMPLE,
                 auto_bind=True,
             ):
+                log.debug("LDAP bind_ok principal=%s", principal)
                 return True
         except LDAPException as exc:
-            print(f"[LDAP] Bind KO con principal: {principal} -> {exc}")
+            log.debug("LDAP bind_fail principal=%s: %s", principal, exc)
             return False
 
     def _load_user(self, username: str) -> AdUser | None:
+        log.debug("LDAP load_user username=%s base_dn=%s", username, self._base_dn)
         try:
             with self._service_connection() as conn:
                 search_filter = (
@@ -103,6 +112,7 @@ class LdapService:
                     ],
                 )
                 if not conn.entries:
+                    log.debug("LDAP load_user not_found username=%s", username)
                     return None
 
                 entry = conn.entries[0]
@@ -110,13 +120,16 @@ class LdapService:
                 raw = entry.memberOf.values if entry.memberOf else []
                 member_of = [str(v) for v in raw]
 
-                return AdUser(
+                user = AdUser(
                     sam_account_name=str(entry.sAMAccountName),
                     user_principal_name=self._str_or_none(entry.userPrincipalName),
                     display_name=self._str_or_none(entry.displayName),
                     mail=self._str_or_none(entry.mail),
                     member_of=member_of,
                 )
+                log.debug("LDAP load_user ok username=%s display_name=%s groups=%d",
+                          user.sam_account_name, user.display_name, len(member_of))
+                return user
         except LDAPException as exc:
             raise RuntimeError(f"Error consultando Active Directory: {exc}") from exc
 

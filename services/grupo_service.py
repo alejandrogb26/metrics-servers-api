@@ -34,6 +34,9 @@ class GrupoService:
         return result
 
     def patch(self, grupo_id: int, patch: GrupoPatch) -> bool:
+        if "dn" in patch.model_fields_set and patch.dn:
+            if not self._ldap.dn_exists(patch.dn):
+                raise ValueError(f"El DN '{patch.dn}' no existe en Active Directory")
         return self._repo.update(grupo_id, patch)
 
     def patch_superadmin(self, grupo_id: int, superadmin: bool) -> bool:
