@@ -29,6 +29,18 @@ Patrón de diseño:
 Dependencias externas:
     - pydantic / pydantic-settings: Validación y carga de configuración.
     - python-dotenv (transitivo via pydantic-settings): Lectura del fichero `.env`.
+
+Autor:
+    Alejandro Gómez Blanco
+
+Proyecto:
+    Metrics Servers
+
+Versión:
+    1.0.0
+
+Organización:
+    Metrics Servers Project
 """
 
 from functools import lru_cache

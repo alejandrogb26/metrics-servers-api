@@ -43,6 +43,18 @@ Flujo de autenticación por petición:
     3. `require_permission` (si aplica) comprueba permisos del grupo del usuario,
        cargándolos de BD en la primera comprobación de la petición (lazy load).
     4. El endpoint recibe el `RequestUser` ya validado y autorizado.
+
+Autor:
+    Alejandro Gómez Blanco
+
+Proyecto:
+    Metrics Servers
+
+Versión:
+    1.0.0
+
+Organización:
+    Metrics Servers Project
 """
 
 import logging

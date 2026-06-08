@@ -37,6 +37,18 @@ Convención de salida:
     donde el agente de recolección de logs (Fluentd, Promtail, etc.) lee el
     stdout del contenedor. Redirigir a stderr mezclaría logs de aplicación con
     mensajes de error del intérprete Python.
+
+Autor:
+    Alejandro Gómez Blanco
+
+Proyecto:
+    Metrics Servers
+
+Versión:
+    1.0.0
+
+Organización:
+    Metrics Servers Project
 """
 
 import logging

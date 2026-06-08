@@ -39,6 +39,18 @@ Por qué existe `usuarios_app` si la autenticación es LDAP:
           `username` puede cambiar (p. ej. por un cambio de nombre), pero el
           Object ID de Active Directory es inmutable y permite mantener la
           asociación incluso si el login del usuario cambia.
+
+Autor:
+    Alejandro Gómez Blanco
+
+Proyecto:
+    Metrics Servers
+
+Versión:
+    1.0.0
+
+Organización:
+    Metrics Servers Project
 """
 
 from typing import Optional

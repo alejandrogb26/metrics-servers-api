@@ -39,6 +39,18 @@ Gestión del logo:
     (la URL pública del fichero en MinIO), no como el nombre interno del
     fichero. Esta transformación la realiza la capa de servicio/repositorio
     antes de construir el `ServicioRead`.
+
+Autor:
+    Alejandro Gómez Blanco
+
+Proyecto:
+    Metrics Servers
+
+Versión:
+    1.0.0
+
+Organización:
+    Metrics Servers Project
 """
 
 from typing import Optional

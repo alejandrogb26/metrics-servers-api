@@ -49,6 +49,18 @@ Política de degradación ante fallos de Redis (fail-open):
     - La alternativa fail-closed (denegar toda petición si Redis falla) haría la
       aplicación completamente inoperativa ante una caída de Redis, lo que se
       consideró un riesgo mayor para este caso de uso.
+
+Autor:
+    Alejandro Gómez Blanco
+
+Proyecto:
+    Metrics Servers
+
+Versión:
+    1.0.0
+
+Organización:
+    Metrics Servers Project
 """
 
 import logging

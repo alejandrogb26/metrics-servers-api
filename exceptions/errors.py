@@ -41,6 +41,18 @@ Equivalencias con el sistema Java anterior:
     Java/JAX-RS original (`DaoException.java`, `ProbeException.java`). Esta
     correspondencia facilita la revisión cruzada del comportamiento entre ambos
     sistemas durante el periodo de transición.
+
+Autor:
+    Alejandro Gómez Blanco
+
+Proyecto:
+    Metrics Servers
+
+Versión:
+    1.0.0
+
+Organización:
+    Metrics Servers Project
 """
 
 

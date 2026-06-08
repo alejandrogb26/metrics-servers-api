@@ -53,6 +53,18 @@ Tabla de mapeo excepción → HTTP:
     IntegrityError            → 409  CONFLICT                 (log: WARNING)
     ValueError                → 400  BAD_REQUEST              (log: DEBUG)
     Exception (catch-all)     → 500  INTERNAL_ERROR           (log: ERROR/EXCEPTION)
+
+Autor:
+    Alejandro Gómez Blanco
+
+Proyecto:
+    Metrics Servers
+
+Versión:
+    1.0.0
+
+Organización:
+    Metrics Servers Project
 """
 
 import logging

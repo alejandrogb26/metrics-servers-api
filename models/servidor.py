@@ -54,6 +54,18 @@ Nombres de columnas en camelCase en la BD:
     Varios campos usan `sa_column_kwargs={"name": "..."}` para mapear el nombre
     Python snake_case al nombre camelCase de la columna en MariaDB, heredado
     del sistema Java/Hibernate anterior: `serverId`, `prettyOs`, `seccionId`.
+
+Autor:
+    Alejandro Gómez Blanco
+
+Proyecto:
+    Metrics Servers
+
+Versión:
+    1.0.0
+
+Organización:
+    Metrics Servers Project
 """
 
 from typing import Optional

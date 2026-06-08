@@ -33,6 +33,18 @@ Rol de `Seccion` en el sistema de autorización:
     diferenciados por sección mediante la tabla `GrupoSeccion`: un grupo puede
     tener permiso de lectura en "métricas" pero no en "configuración". Esto
     constituye el segundo nivel del modelo de permisos (ver `models/grupo.py`).
+
+Autor:
+    Alejandro Gómez Blanco
+
+Proyecto:
+    Metrics Servers
+
+Versión:
+    1.0.0
+
+Organización:
+    Metrics Servers Project
 """
 
 from typing import Optional

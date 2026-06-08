@@ -46,6 +46,18 @@ Patrón de herencia de modelos (SQLModel):
     `Ambito` añade solo el campo `id` con la anotación de clave primaria para SQLAlchemy.
     `AmbitoRead` añade `id` como campo requerido (no `Optional`) y la configuración
     de serialización camelCase para la API.
+
+Autor:
+    Alejandro Gómez Blanco
+
+Proyecto:
+    Metrics Servers
+
+Versión:
+    1.0.0
+
+Organización:
+    Metrics Servers Project
 """
 
 from typing import Optional

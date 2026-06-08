@@ -40,6 +40,18 @@ Compatibilidad con clientes:
     Java Swing, que leen claims como `displayName`, `mail` y `grupoId` para
     personalizar la interfaz. Cambiar el nombre de cualquier claim rompería
     la compatibilidad con esos clientes sin una migración coordinada.
+
+Autor:
+    Alejandro Gómez Blanco
+
+Proyecto:
+    Metrics Servers
+
+Versión:
+    1.0.0
+
+Organización:
+    Metrics Servers Project
 """
 
 import uuid

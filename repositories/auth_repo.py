@@ -37,6 +37,18 @@ Relaciones con otros módulos:
                                      URL de MinIO con el `foto_perfil` devuelto.
     - `core/database.py`           → proporciona la `Session` inyectada en el
                                      constructor.
+
+Autor:
+    Alejandro Gómez Blanco
+
+Proyecto:
+    Metrics Servers
+
+Versión:
+    1.0.0
+
+Organización:
+    Metrics Servers Project
 """
 
 from sqlmodel import Session, select

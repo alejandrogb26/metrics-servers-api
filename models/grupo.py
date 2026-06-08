@@ -60,6 +60,18 @@ Nombres de columnas en camelCase en la BD:
     nombres camelCase en MariaDB (`grupoId`, `permisoId`, `seccionId`). Esto es
     un legado del sistema Java/Hibernate anterior que nombró las columnas con ese
     estilo. Se mapea explícitamente con `sa_column_kwargs={"name": "..."}`.
+
+Autor:
+    Alejandro Gómez Blanco
+
+Proyecto:
+    Metrics Servers
+
+Versión:
+    1.0.0
+
+Organización:
+    Metrics Servers Project
 """
 
 from typing import Optional

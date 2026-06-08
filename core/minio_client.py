@@ -31,6 +31,18 @@ Patrón de diseño:
     sola vez por proceso y se reutiliza en todas las llamadas posteriores. El
     cliente de MinIO gestiona internamente su propio pool de conexiones HTTP, por
     lo que crear múltiples instancias sería innecesariamente costoso.
+
+Autor:
+    Alejandro Gómez Blanco
+
+Proyecto:
+    Metrics Servers
+
+Versión:
+    1.0.0
+
+Organización:
+    Metrics Servers Project
 """
 
 from functools import lru_cache

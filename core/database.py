@@ -30,6 +30,18 @@ Relaciones con otros módulos:
       inyectada por `get_session`.
     - `main.py` → llama a `create_db_tables()` en el evento de arranque (`lifespan`)
       para garantizar que el esquema existe antes de aceptar peticiones.
+
+Autor:
+    Alejandro Gómez Blanco
+
+Proyecto:
+    Metrics Servers
+
+Versión:
+    1.0.0
+
+Organización:
+    Metrics Servers Project
 """
 
 from collections.abc import Generator

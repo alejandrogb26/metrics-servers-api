@@ -43,6 +43,18 @@ Advertencia de seguridad:
     El modo DEBUG puede exponer datos sensibles en los logs. Activar únicamente
     en entornos de desarrollo o diagnóstico controlados, nunca en producción.
     Ver también el campo `app_debug` en `core/config.py`.
+
+Autor:
+    Alejandro Gómez Blanco
+
+Proyecto:
+    Metrics Servers
+
+Versión:
+    1.0.0
+
+Organización:
+    Metrics Servers Project
 """
 
 import json

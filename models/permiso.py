@@ -36,6 +36,18 @@ Rol de `Permiso` en el sistema de autorización:
         - Nivel de sección: el permiso aplica solo en una sección concreta.
     `core/dependencies.py` consulta ambos niveles para decidir si el usuario
     puede invocar un endpoint determinado.
+
+Autor:
+    Alejandro Gómez Blanco
+
+Proyecto:
+    Metrics Servers
+
+Versión:
+    1.0.0
+
+Organización:
+    Metrics Servers Project
 """
 
 from typing import Optional

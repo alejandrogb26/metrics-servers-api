@@ -33,6 +33,18 @@ Relaciones con otros módulos:
                                       tras validar las credenciales y emitir el JWT.
     - `services/minio_service.py`   → devuelve `UploadResult` tras subir una
                                       imagen a MinIO.
+
+Autor:
+    Alejandro Gómez Blanco
+
+Proyecto:
+    Metrics Servers
+
+Versión:
+    1.0.0
+
+Organización:
+    Metrics Servers Project
 """
 
 import math

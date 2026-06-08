@@ -34,6 +34,18 @@ Patrón de diseño:
     un `MongoClient` ya existente (`client[nombre]`) es una operación puramente
     local y sin coste de red, por lo que el caché añadiría complejidad sin
     beneficio real.
+
+Autor:
+    Alejandro Gómez Blanco
+
+Proyecto:
+    Metrics Servers
+
+Versión:
+    1.0.0
+
+Organización:
+    Metrics Servers Project
 """
 
 from functools import lru_cache

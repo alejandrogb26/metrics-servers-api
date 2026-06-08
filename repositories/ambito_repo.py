@@ -26,6 +26,18 @@ Relaciones con otros módulos:
                                   que se inyecta en el constructor.
     - Servicios y routers      → instancian `AmbitoRepository(session)` y llaman
                                   a sus métodos dentro del scope de una petición HTTP.
+
+Autor:
+    Alejandro Gómez Blanco
+
+Proyecto:
+    Metrics Servers
+
+Versión:
+    1.0.0
+
+Organización:
+    Metrics Servers Project
 """
 
 from sqlalchemy import func

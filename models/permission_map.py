@@ -45,6 +45,18 @@ Estructura del mapa de permisos:
 
     Ambos campos son opcionales (`None`). Un grupo puede tener solo permisos
     globales, solo permisos de sección, ambos, o ninguno (mapa vacío).
+
+Autor:
+    Alejandro Gómez Blanco
+
+Proyecto:
+    Metrics Servers
+
+Versión:
+    1.0.0
+
+Organización:
+    Metrics Servers Project
 """
 
 from typing import Generic, Optional, TypeVar
