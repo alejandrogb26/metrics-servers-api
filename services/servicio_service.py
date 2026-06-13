@@ -52,6 +52,7 @@ Organización:
 import time
 from sqlmodel import Session
 
+from exceptions.errors import NotFoundException
 from models.servicio import Servicio, ServicioCreate, ServicioPatch, ServicioRead
 from repositories.servicio_repo import ServicioRepository
 from services.minio_service import MinioService
@@ -71,23 +72,22 @@ class ServicioService:
         self._repo = ServicioRepository(session)
         self._minio = MinioService()
 
-    def find_by_id(self, servicio_id: int) -> ServicioRead | None:
+    def find_by_id(self, servicio_id: int) -> ServicioRead:
         """
         Busca un servicio por clave primaria y lo devuelve con la URL del logo.
-
-        Propaga `None` si el servicio no existe, para que el router eleve
-        `HTTP 404` sin que el servicio conozca el protocolo HTTP.
 
         Args:
             servicio_id: Clave primaria del servicio.
 
         Retorna:
-            `ServicioRead` con `url_logo` resuelta desde MinIO, o `None` si
-            no existe. `url_logo` es `None` si el servicio no tiene logo.
+            `ServicioRead` con `url_logo` resuelta desde MinIO.
+
+        Lanza:
+            `NotFoundException` si no existe un servicio con `servicio_id`.
         """
         s = self._repo.find_by_id(servicio_id)
         if s is None:
-            return None
+            raise NotFoundException(f"Servicio con id={servicio_id} no encontrado")
         return self._to_read(s)
 
     def find_all(self, page: int, size: int) -> tuple[list[ServicioRead], int]:
@@ -127,7 +127,7 @@ class ServicioService:
         s = self._repo.insert(data)
         return s.id  # type: ignore[return-value]
 
-    def update(self, servicio_id: int, patch: ServicioPatch) -> bool:
+    def update(self, servicio_id: int, patch: ServicioPatch) -> None:
         """
         Actualiza los campos editables de un servicio (PATCH semántico).
 
@@ -138,12 +138,13 @@ class ServicioService:
             servicio_id: ID del servicio a actualizar.
             patch:       DTO `ServicioPatch` con los campos a modificar.
 
-        Retorna:
-            `True` si el servicio existía y se actualizó; `False` si no existe.
+        Lanza:
+            `NotFoundException` si no existe un servicio con `servicio_id`.
         """
-        return self._repo.update(servicio_id, patch)
+        if not self._repo.update(servicio_id, patch):
+            raise NotFoundException(f"Servicio con id={servicio_id} no encontrado")
 
-    def delete(self, servicio_id: int) -> bool:
+    def delete(self, servicio_id: int) -> None:
         """
         Elimina un servicio por clave primaria.
 
@@ -153,10 +154,11 @@ class ServicioService:
         Args:
             servicio_id: ID del servicio a eliminar.
 
-        Retorna:
-            `True` si el servicio existía y se eliminó; `False` si no existe.
+        Lanza:
+            `NotFoundException` si no existe un servicio con `servicio_id`.
         """
-        return self._repo.delete(servicio_id)
+        if not self._repo.delete(servicio_id):
+            raise NotFoundException(f"Servicio con id={servicio_id} no encontrado")
 
     def update_logo(self, servicio_id: int, file_data: bytes, original_filename: str) -> tuple[str, str | None]:
         """

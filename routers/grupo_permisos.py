@@ -62,7 +62,7 @@ Organización:
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlmodel import Session
 
@@ -137,8 +137,7 @@ def replace_all(
         404 Not Found    — no existe un grupo con `grupo_id`.
     """
     svc = GrupoPermisosService(session)
-    if not svc.replace_all(grupo_id, permisos):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grupo no encontrado")
+    svc.replace_all(grupo_id, permisos)
     return GrupoService(session).get_by_id(grupo_id)
 
 
@@ -179,8 +178,7 @@ def patch_global(
         404 Not Found    — no existe un grupo con `grupo_id`.
     """
     svc = GrupoPermisosService(session)
-    if not svc.patch_global(grupo_id, req.add, req.remove):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grupo no encontrado")
+    svc.patch_global(grupo_id, req.add, req.remove)
     return GrupoService(session).get_by_id(grupo_id)
 
 
@@ -220,8 +218,7 @@ def replace_seccion(
         404 Not Found    — no existe un grupo con `grupo_id`.
     """
     svc = GrupoPermisosService(session)
-    if not svc.replace_seccion(grupo_id, seccion_id, permiso_ids):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grupo no encontrado")
+    svc.replace_seccion(grupo_id, seccion_id, permiso_ids)
     return GrupoService(session).get_by_id(grupo_id)
 
 
@@ -260,6 +257,5 @@ def patch_seccion(
         404 Not Found    — no existe un grupo con `grupo_id`.
     """
     svc = GrupoPermisosService(session)
-    if not svc.patch_seccion(grupo_id, seccion_id, req.add, req.remove):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grupo no encontrado")
+    svc.patch_seccion(grupo_id, seccion_id, req.add, req.remove)
     return GrupoService(session).get_by_id(grupo_id)

@@ -158,10 +158,7 @@ def find_by_id(
     """
     svc = ServidorService(session)
     section_ids = visible_section_ids(user, "AUDIT_SERV")
-    result = svc.find_by_id(servidor_id, section_ids=section_ids)
-    if result is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Servidor no encontrado")
-    return result
+    return svc.find_by_id(servidor_id, section_ids=section_ids)
 
 
 @router.post("", response_model=ServidorRead, status_code=status.HTTP_201_CREATED)
@@ -300,8 +297,7 @@ def patch_servidor(
     """
     svc = ServidorService(session)
     section_ids = visible_section_ids(user, "MODIFY_SERV")
-    if not svc.update(servidor_id, patch, section_ids=section_ids):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Servidor no encontrado")
+    svc.update(servidor_id, patch, section_ids=section_ids)
 
 
 @router.delete("/{servidor_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -332,8 +328,7 @@ def delete_servidor(
     """
     svc = ServidorService(session)
     section_ids = visible_section_ids(user, "MODIFY_SERV")
-    if not svc.delete(servidor_id, section_ids=section_ids):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Servidor no encontrado")
+    svc.delete(servidor_id, section_ids=section_ids)
 
 
 @router.post("/bulk-delete", response_model=BulkResult)
@@ -409,10 +404,7 @@ def add_servicios(
     """
     svc = ServidorService(session)
     section_ids = visible_section_ids(user, "MODIFY_SERV")
-    added = svc.add_servicios(servidor_id, servicio_ids, section_ids=section_ids)
-    if added is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Servidor no encontrado")
-    return CountResult(count=added)
+    return CountResult(count=svc.add_servicios(servidor_id, servicio_ids, section_ids=section_ids))
 
 
 @router.delete("/{servidor_id}/servicios", response_model=CountResult)
@@ -450,10 +442,7 @@ def remove_servicios(
     """
     svc = ServidorService(session)
     section_ids = visible_section_ids(user, "MODIFY_SERV")
-    removed = svc.remove_servicios(servidor_id, ids, section_ids=section_ids)
-    if removed is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Servidor no encontrado")
-    return CountResult(count=removed)
+    return CountResult(count=svc.remove_servicios(servidor_id, ids, section_ids=section_ids))
 
 
 # ── Foto ───────────────────────────────────────────────────────────────────────
@@ -499,9 +488,7 @@ async def upload_foto(
     """
     svc = ServidorService(session)
     section_ids = visible_section_ids(user, "MODIFY_SERV")
-    servidor = svc.find_by_id(servidor_id, section_ids=section_ids)
-    if servidor is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Servidor no encontrado")
+    svc.find_by_id(servidor_id, section_ids=section_ids)  # raises NotFoundException if not visible
     if not file.filename:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Archivo no proporcionado")
 
@@ -555,7 +542,4 @@ def get_metrics(
     """
     svc = ServidorService(session)
     section_ids = visible_section_ids(user, "AUDIT_SERV")
-    result = svc.get_metrics(server_id, minutes, section_ids=section_ids)
-    if result is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Servidor no encontrado")
-    return result
+    return svc.get_metrics(server_id, minutes, section_ids=section_ids)

@@ -43,6 +43,7 @@ Organización:
 
 from sqlmodel import Session
 
+from exceptions.errors import NotFoundException
 from models.seccion import Seccion, SeccionCreate, SeccionPatch, SeccionRead
 from repositories.seccion_repo import SeccionRepository
 
@@ -59,28 +60,22 @@ class SeccionService:
     def __init__(self, session: Session) -> None:
         self._repo = SeccionRepository(session)
 
-    def find_by_id(self, seccion_id: int) -> SeccionRead | None:
+    def find_by_id(self, seccion_id: int) -> SeccionRead:
         """
         Busca una sección por clave primaria y la devuelve como DTO.
-
-        Propaga `None` del repositorio si la sección no existe, para que el
-        router pueda elevar `HTTP 404` sin que el servicio conozca el protocolo
-        HTTP.
-
-        El `# type: ignore[arg-type]` se debe a la discrepancia entre el `id`
-        del ORM (`Optional[int]`) y el `id` de `SeccionRead` (`int`). En runtime
-        el `id` siempre es no-None para registros persistidos.
 
         Args:
             seccion_id: Clave primaria de la sección a recuperar.
 
         Retorna:
-            `SeccionRead` con `id`, `nombre` y `descripcion`, o `None` si no
-            existe.
+            `SeccionRead` con `id`, `nombre` y `descripcion`.
+
+        Lanza:
+            `NotFoundException` si no existe una sección con `seccion_id`.
         """
         s = self._repo.find_by_id(seccion_id)
         if s is None:
-            return None
+            raise NotFoundException(f"Sección con id={seccion_id} no encontrada")
         return SeccionRead(id=s.id, nombre=s.nombre, descripcion=s.descripcion)  # type: ignore[arg-type]
 
     def find_all(self, page: int, size: int) -> tuple[list[SeccionRead], int]:
@@ -127,33 +122,32 @@ class SeccionService:
         s = self._repo.insert(data)
         return s.id  # type: ignore[return-value]
 
-    def update(self, seccion_id: int, patch: SeccionPatch) -> bool:
+    def update(self, seccion_id: int, patch: SeccionPatch) -> None:
         """
         Actualiza los campos de una sección existente (PATCH semántico).
 
-        Delega directamente en el repositorio. Los campos con valor `None` en
-        el patch se excluyen de la actualización (`exclude_none=True` en el
-        repositorio), lo que impide borrar `descripcion` enviando `null`.
+        Los campos con valor `None` en el patch se excluyen de la actualización
+        (`exclude_none=True` en el repositorio).
 
         Args:
             seccion_id: ID de la sección a actualizar.
             patch:      DTO `SeccionPatch` con los campos a modificar.
 
-        Retorna:
-            `True` si la sección existía y se actualizó; `False` si no existe.
+        Lanza:
+            `NotFoundException` si no existe una sección con `seccion_id`.
         """
-        return self._repo.update(seccion_id, patch)
+        if not self._repo.update(seccion_id, patch):
+            raise NotFoundException(f"Sección con id={seccion_id} no encontrada")
 
-    def delete(self, seccion_id: int) -> bool:
+    def delete(self, seccion_id: int) -> None:
         """
         Elimina una sección por clave primaria.
-
-        Delega directamente en el repositorio (borrado ORM con cascada).
 
         Args:
             seccion_id: ID de la sección a eliminar.
 
-        Retorna:
-            `True` si la sección existía y se eliminó; `False` si no existe.
+        Lanza:
+            `NotFoundException` si no existe una sección con `seccion_id`.
         """
-        return self._repo.delete(seccion_id)
+        if not self._repo.delete(seccion_id):
+            raise NotFoundException(f"Sección con id={seccion_id} no encontrada")

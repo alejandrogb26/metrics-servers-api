@@ -31,6 +31,9 @@ Relaciones con otros módulos:
                                           operaciones contra MongoDB.
     - `services/servidor_service.py`   → lanza `ProbeException` cuando el sondeo
                                           SSH de un servidor falla.
+    - `services/auth_service.py`       → lanza `UnauthorizedException` cuando las
+                                          credenciales son inválidas o el usuario
+                                          no pertenece a ningún grupo autorizado.
     - Capa de servicios en general     → lanza `NotFoundException` y
                                           `ValidationException` para condiciones
                                           de negocio (recurso inexistente, datos
@@ -119,6 +122,32 @@ class ProbeException(Exception):
     def __init__(self, message: str, cause: Exception | None = None) -> None:
         super().__init__(message)
         self.cause = cause
+
+
+class UnauthorizedException(Exception):
+    """
+    Excepción de autenticación fallida.
+
+    Se lanza cuando una operación requiere que el llamador esté autenticado
+    y las credenciales proporcionadas son inválidas, están ausentes o no
+    otorgan acceso al sistema: credenciales LDAP incorrectas, usuario que
+    no pertenece a ningún grupo autorizado, etc.
+
+    Se diferencia de `ValidationException` en que el problema no es que los
+    datos de entrada estén semánticamente mal formados, sino que la identidad
+    del usuario no puede verificarse o no está autorizada para operar en el
+    sistema.
+
+    `exceptions/handlers.py` captura `UnauthorizedException` y la traduce a
+    una respuesta HTTP 401 (Unauthorized). Devolver 401 (y no 422 o 400) es
+    semánticamente crítico para que los interceptores de los clientes Flutter
+    y Swing reconozcan el fallo de autenticación y redirijan al flujo de login.
+
+    No tiene constructor personalizado; hereda el de `Exception` directamente:
+        raise UnauthorizedException("Credenciales inválidas")
+    """
+
+    pass
 
 
 class NotFoundException(Exception):

@@ -57,7 +57,7 @@ Organización:
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query
 from sqlmodel import Session
 
 from core.database import get_session
@@ -130,7 +130,4 @@ def get_by_id(
         404 Not Found    — no existe un permiso con `permiso_id`.
     """
     service = PermisoService(session)
-    permiso = service.get_by_id(permiso_id)
-    if permiso is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Permiso no encontrado")
-    return permiso
+    return service.get_by_id(permiso_id)

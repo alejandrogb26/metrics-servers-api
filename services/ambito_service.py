@@ -40,6 +40,7 @@ Organización:
 
 from sqlmodel import Session
 
+from exceptions.errors import NotFoundException
 from models.ambito import AmbitoRead
 from repositories.ambito_repo import AmbitoRepository
 
@@ -81,21 +82,20 @@ class AmbitoService:
         items, total = self._repo.find_all(offset=offset, limit=size)
         return [AmbitoRead(id=a.id, nombre=a.nombre, descripcion=a.descripcion) for a in items], total  # type: ignore[arg-type]
 
-    def get_by_id(self, ambito_id: int) -> AmbitoRead | None:
+    def get_by_id(self, ambito_id: int) -> AmbitoRead:
         """
         Busca un ámbito por su clave primaria y lo devuelve como DTO.
-
-        Propaga `None` del repositorio si el ámbito no existe, para que el
-        router pueda elevar `HTTP 404` sin que el servicio conozca el protocolo
-        HTTP.
 
         Args:
             ambito_id: Clave primaria del ámbito a recuperar.
 
         Retorna:
-            `AmbitoRead` si el ámbito existe, `None` si no.
+            `AmbitoRead` con id, nombre y descripción del ámbito.
+
+        Lanza:
+            `NotFoundException` si no existe un ámbito con `ambito_id`.
         """
         a = self._repo.find_by_id(ambito_id)
         if a is None:
-            return None
+            raise NotFoundException(f"Ámbito con id={ambito_id} no encontrado")
         return AmbitoRead(id=a.id, nombre=a.nombre, descripcion=a.descripcion)  # type: ignore[arg-type]

@@ -52,6 +52,7 @@ Organización:
 
 from sqlmodel import Session
 
+from exceptions.errors import NotFoundException, ValidationException
 from models.common import BulkResult
 from models.grupo import GrupoCreate, GrupoPatch, GrupoRead
 from models.permission_map import PermissionMap
@@ -89,7 +90,7 @@ class GrupoService:
         offset = page * size
         return self._repo.find_all(offset=offset, limit=size)
 
-    def get_by_id(self, grupo_id: int) -> GrupoRead | None:
+    def get_by_id(self, grupo_id: int) -> GrupoRead:
         """
         Devuelve un grupo con sus permisos por clave primaria.
 
@@ -97,9 +98,15 @@ class GrupoService:
             grupo_id: Clave primaria del grupo.
 
         Retorna:
-            `GrupoRead` completo (con permisos), o `None` si no existe.
+            `GrupoRead` completo (con permisos).
+
+        Lanza:
+            `NotFoundException` si no existe un grupo con `grupo_id`.
         """
-        return self._repo.find_by_id(grupo_id)
+        grupo = self._repo.find_by_id(grupo_id)
+        if grupo is None:
+            raise NotFoundException(f"Grupo con id={grupo_id} no encontrado")
+        return grupo
 
     def create_bulk(self, items: list[GrupoCreate]) -> BulkResult:
         """
@@ -132,7 +139,7 @@ class GrupoService:
             try:
                 # Punto 2 de Java: verificar que el DN existe en AD
                 if data.dn and not self._ldap.dn_exists(data.dn):
-                    raise ValueError(f"El DN '{data.dn}' no existe en Active Directory")
+                    raise ValidationException(f"El DN '{data.dn}' no existe en Active Directory")
                 self._repo.insert(data)
                 result.ok += 1
             except Exception as exc:
@@ -140,7 +147,7 @@ class GrupoService:
                 result.errors.append(f"{data.nombre}: {exc}")
         return result
 
-    def patch(self, grupo_id: int, patch: GrupoPatch) -> bool:
+    def patch(self, grupo_id: int, patch: GrupoPatch) -> None:
         """
         Actualiza los campos editables de un grupo (PATCH semántico).
 
@@ -150,27 +157,24 @@ class GrupoService:
                mediante `model_fields_set`).
             2. El valor enviado es no-falsy (no es `None` ni cadena vacía).
 
-            Si se envía `{"dn": null}` o `{"dn": ""}`, la condición `patch.dn`
-            es falsa y la verificación LDAP se omite. Si se envía un DN con
-            valor, se verifica en AD y se lanza `ValueError` si no existe —
-            que el router convierte en `HTTP 422`.
+            Si se envía `{"dn": null}` o `{"dn": ""}`, la verificación LDAP
+            se omite. Si se envía un DN con valor, se verifica en AD.
 
         Args:
             grupo_id: ID del grupo a actualizar.
             patch:    DTO `GrupoPatch` con los campos a modificar.
 
-        Retorna:
-            `True` si el grupo existía y se actualizó; `False` si no existe.
-
         Lanza:
-            `ValueError` si el DN enviado no existe en Active Directory.
+            `NotFoundException`    si no existe un grupo con `grupo_id`.
+            `ValidationException`  si el DN enviado no existe en Active Directory.
         """
         if "dn" in patch.model_fields_set and patch.dn:
             if not self._ldap.dn_exists(patch.dn):
-                raise ValueError(f"El DN '{patch.dn}' no existe en Active Directory")
-        return self._repo.update(grupo_id, patch)
+                raise ValidationException(f"El DN '{patch.dn}' no existe en Active Directory")
+        if not self._repo.update(grupo_id, patch):
+            raise NotFoundException(f"Grupo con id={grupo_id} no encontrado")
 
-    def patch_superadmin(self, grupo_id: int, superadmin: bool) -> bool:
+    def patch_superadmin(self, grupo_id: int, superadmin: bool) -> None:
         """
         Cambia el flag `superadmin` de un grupo.
 
@@ -182,22 +186,24 @@ class GrupoService:
             grupo_id:   ID del grupo a modificar.
             superadmin: Nuevo valor del flag (`True` o `False`).
 
-        Retorna:
-            `True` si el grupo existía y se actualizó; `False` si no existe.
+        Lanza:
+            `NotFoundException` si no existe un grupo con `grupo_id`.
         """
-        return self._repo.update_superadmin(grupo_id, superadmin)
+        if not self._repo.update_superadmin(grupo_id, superadmin):
+            raise NotFoundException(f"Grupo con id={grupo_id} no encontrado")
 
-    def delete(self, grupo_id: int) -> bool:
+    def delete(self, grupo_id: int) -> None:
         """
         Elimina un grupo por clave primaria.
 
         Args:
             grupo_id: ID del grupo a eliminar.
 
-        Retorna:
-            `True` si el grupo existía y se eliminó; `False` si no existe.
+        Lanza:
+            `NotFoundException` si no existe un grupo con `grupo_id`.
         """
-        return self._repo.delete(grupo_id)
+        if not self._repo.delete(grupo_id):
+            raise NotFoundException(f"Grupo con id={grupo_id} no encontrado")
 
     def delete_bulk(self, ids: list[int]) -> BulkResult:
         """
@@ -238,7 +244,7 @@ class GrupoPermisosService:
     def __init__(self, session: Session) -> None:
         self._repo = GrupoRepository(session)
 
-    def replace_all(self, grupo_id: int, permisos: PermissionMap[int]) -> bool:
+    def replace_all(self, grupo_id: int, permisos: PermissionMap[int]) -> None:
         """
         Reemplaza todos los permisos del grupo (globales + todas las secciones).
 
@@ -250,14 +256,15 @@ class GrupoPermisosService:
             permisos: `PermissionMap[int]` con los nuevos permisos globales
                       y por sección.
 
-        Retorna:
-            `True` si el grupo existe; `False` si no.
+        Lanza:
+            `NotFoundException` si no existe un grupo con `grupo_id`.
         """
-        return self._repo.replace_all_permissions(grupo_id, permisos)
+        if not self._repo.replace_all_permissions(grupo_id, permisos):
+            raise NotFoundException(f"Grupo con id={grupo_id} no encontrado")
 
     def patch_global(
         self, grupo_id: int, to_add: list[int] | None, to_remove: list[int] | None
-    ) -> bool:
+    ) -> None:
         """
         Modifica permisos globales del grupo de forma incremental.
 
@@ -266,12 +273,13 @@ class GrupoPermisosService:
             to_add:    IDs de permisos a añadir, o `None` para no añadir.
             to_remove: IDs de permisos a eliminar, o `None` para no eliminar.
 
-        Retorna:
-            `True` si el grupo existe; `False` si no.
+        Lanza:
+            `NotFoundException` si no existe un grupo con `grupo_id`.
         """
-        return self._repo.patch_global_permissions(grupo_id, to_add, to_remove)
+        if not self._repo.patch_global_permissions(grupo_id, to_add, to_remove):
+            raise NotFoundException(f"Grupo con id={grupo_id} no encontrado")
 
-    def replace_seccion(self, grupo_id: int, seccion_id: int, permiso_ids: list[int]) -> bool:
+    def replace_seccion(self, grupo_id: int, seccion_id: int, permiso_ids: list[int]) -> None:
         """
         Reemplaza todos los permisos de una sección concreta para el grupo.
 
@@ -281,14 +289,15 @@ class GrupoPermisosService:
             permiso_ids: Lista de IDs de permiso que deben quedar asignados.
                          Lista vacía elimina todos los permisos de esa sección.
 
-        Retorna:
-            `True` si el grupo existe; `False` si no.
+        Lanza:
+            `NotFoundException` si no existe un grupo con `grupo_id`.
         """
-        return self._repo.replace_section_permissions(grupo_id, seccion_id, permiso_ids)
+        if not self._repo.replace_section_permissions(grupo_id, seccion_id, permiso_ids):
+            raise NotFoundException(f"Grupo con id={grupo_id} no encontrado")
 
     def patch_seccion(
         self, grupo_id: int, seccion_id: int, to_add: list[int] | None, to_remove: list[int] | None
-    ) -> bool:
+    ) -> None:
         """
         Modifica permisos de una sección concreta para el grupo de forma incremental.
 
@@ -298,7 +307,8 @@ class GrupoPermisosService:
             to_add:     IDs de permisos a añadir, o `None` para no añadir.
             to_remove:  IDs de permisos a eliminar, o `None` para no eliminar.
 
-        Retorna:
-            `True` si el grupo existe; `False` si no.
+        Lanza:
+            `NotFoundException` si no existe un grupo con `grupo_id`.
         """
-        return self._repo.patch_section_permissions(grupo_id, seccion_id, to_add, to_remove)
+        if not self._repo.patch_section_permissions(grupo_id, seccion_id, to_add, to_remove):
+            raise NotFoundException(f"Grupo con id={grupo_id} no encontrado")

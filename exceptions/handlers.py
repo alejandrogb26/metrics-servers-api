@@ -45,6 +45,7 @@ Contrato de respuesta HTTP:
     Cambiarla requeriría actualizar ambos clientes.
 
 Tabla de mapeo excepción → HTTP:
+    UnauthorizedException     → 401  UNAUTHORIZED             (log: DEBUG)
     NotFoundException         → 404  NOT_FOUND                (log: DEBUG)
     ValidationException       → 422  VALIDATION_ERROR         (log: DEBUG)
     RequestValidationError    → 422  VALIDATION_ERROR+details (log: DEBUG)
@@ -78,6 +79,7 @@ from exceptions.errors import (
     DaoException,
     NotFoundException,
     ProbeException,
+    UnauthorizedException,
     ValidationException,
 )
 
@@ -120,6 +122,26 @@ def register_exception_handlers(app: FastAPI) -> None:
         app: Instancia de la aplicación FastAPI sobre la que se registran los
              handlers. Debe ser la misma instancia que monta los routers.
     """
+
+    @app.exception_handler(UnauthorizedException)
+    async def unauthorized_handler(request: Request, exc: UnauthorizedException):
+        """
+        Maneja `UnauthorizedException` → HTTP 401 Unauthorized.
+
+        Se activa cuando el servicio de autenticación rechaza las credenciales
+        del usuario: login LDAP fallido, usuario sin grupo autorizado en el
+        sistema, etc. Devolver 401 (y no 422) es semánticamente crítico para
+        que los interceptores de los clientes Flutter y Swing reconozcan el
+        fallo y redirijan al flujo de login.
+
+        Logging en DEBUG porque un intento de login fallido es una condición
+        de operación normal, no un error interno del sistema.
+        """
+        log.debug("UNAUTHORIZED %s %s: %s", request.method, request.url.path, exc)
+        return JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={"error": "UNAUTHORIZED", "message": str(exc)},
+        )
 
     @app.exception_handler(NotFoundException)
     async def not_found_handler(request: Request, exc: NotFoundException):

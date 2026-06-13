@@ -65,7 +65,7 @@ import time
 from sqlmodel import Session
 
 from core.mongo import get_mongo_db
-from exceptions.errors import ProbeException
+from exceptions.errors import NotFoundException, ProbeException
 from models.common import BulkResult
 from models.servidor import ServidorCreate, ServidorPatch, ServidorPatchRequest, ServidorRead
 from repositories.mongo_repo import MongoRepository
@@ -95,17 +95,14 @@ class ServidorService:
 
     def find_by_id(
         self, servidor_id: int, section_ids: set[int] | None = None
-    ) -> ServidorRead | None:
+    ) -> ServidorRead:
         """
         Devuelve un servidor por PK si es visible para el usuario.
 
-        Carga el servidor desde el repositorio y aplica el filtro de sección
-        en Python (no en SQL). Si el servidor existe pero su `seccion_id` no
-        está en `section_ids`, devuelve `None` indistinguible de "no encontrado"
-        para no revelar la existencia de recursos no autorizados.
-
-        Tras la comprobación de visibilidad, resuelve `imagen_url` mediante
-        `_resolve_imagen_url`.
+        Aplica el filtro de sección en Python. Si el servidor existe pero su
+        `seccion_id` no está en `section_ids`, lanza `NotFoundException`
+        indistinguible de "no encontrado" para no revelar la existencia de
+        recursos no autorizados.
 
         Args:
             servidor_id: PK del servidor en MariaDB.
@@ -113,14 +110,16 @@ class ServidorService:
                          es superadmin.
 
         Retorna:
-            `ServidorRead` con `imagen_url` resuelta, o `None` si no existe
-            o no es visible.
+            `ServidorRead` con `imagen_url` resuelta.
+
+        Lanza:
+            `NotFoundException` si el servidor no existe o no es visible.
         """
         servidor = self._repo.find_by_id(servidor_id)
-        if servidor is None:
-            return None
-        if section_ids is not None and servidor.seccion_id not in section_ids:
-            return None  # treated as not-found to avoid revealing existence
+        if servidor is None or (
+            section_ids is not None and servidor.seccion_id not in section_ids
+        ):
+            raise NotFoundException(f"Servidor con id={servidor_id} no encontrado")
         self._resolve_imagen_url(servidor)
         return servidor
 
@@ -276,52 +275,34 @@ class ServidorService:
 
     def update(
         self, servidor_id: int, patch: ServidorPatchRequest, section_ids: set[int] | None = None
-    ) -> bool:
+    ) -> None:
         """
         Actualiza un servidor con validaciones de sección y sincronización de
         MongoDB y SSH.
 
         Validación de sección (si `section_ids` no es None):
             1. La sección ACTUAL del servidor debe estar en `section_ids`. Si no,
-               devuelve `False` (tratado como no encontrado).
+               lanza `NotFoundException` (tratado como no encontrado para no
+               revelar la existencia de recursos no autorizados).
             2. Si el patch incluye `seccion_id`, la sección DESTINO también debe
                estar en `section_ids`. Esto impide mover un servidor a una sección
                no accesible para el usuario.
-
-        Sincronización de MongoDB:
-            Si `server_id` cambia, se actualiza el campo en todos los documentos
-            de MongoDB para mantener la consistencia con las métricas históricas.
-            La operación se realiza solo si el update en MariaDB tuvo éxito y el
-            nuevo `server_id` es diferente al anterior.
-
-        Re-probe SSH al cambiar DNS:
-            Si el patch incluye un nuevo `dns`, se ejecuta un probe SSH para
-            actualizar hostname/OS/arch/kernel. A diferencia del insert (donde el
-            fallo del probe es fatal), aquí el fallo se silencia con
-            `except Exception: pass` sin ningún log. El servidor queda con los
-            datos de diagnóstico del DNS anterior.
-
-        Traducción de DTO:
-            `ServidorPatchRequest` (DTO público con alias camelCase) se traduce a
-            `ServidorPatch` (DTO interno con nombres ORM snake_case) antes de
-            llamar al repositorio.
 
         Args:
             servidor_id: PK del servidor a actualizar.
             patch:       DTO `ServidorPatchRequest` con los campos a modificar.
             section_ids: Secciones visibles, o `None` para superadmin.
 
-        Retorna:
-            `True` si el servidor existía y fue actualizado; `False` si no
-            existe o no es visible para el usuario.
+        Lanza:
+            `NotFoundException` si el servidor no existe o no es visible.
         """
         if section_ids is not None:
             current_seccion = self._repo.find_seccion_id_by_id(servidor_id)
             if current_seccion is None or current_seccion not in section_ids:
-                return False
+                raise NotFoundException(f"Servidor con id={servidor_id} no encontrado")
             # Prevent moving a server to a section the caller cannot access.
             if patch.seccion_id is not None and patch.seccion_id not in section_ids:
-                return False
+                raise NotFoundException(f"Servidor con id={servidor_id} no encontrado")
 
         old_server_id: str | None = None
         if patch.server_id is not None:
@@ -332,53 +313,49 @@ class ServidorService:
             dns=patch.dns,
             seccion_id=patch.seccion_id,
         )
-        updated = self._repo.update(servidor_id, db_patch)
+        if not self._repo.update(servidor_id, db_patch):
+            raise NotFoundException(f"Servidor con id={servidor_id} no encontrado")
 
-        if updated:
-            if old_server_id and patch.server_id and old_server_id != patch.server_id:
-                self._mongo.update_server_id(old_server_id, patch.server_id)
+        if old_server_id and patch.server_id and old_server_id != patch.server_id:
+            self._mongo.update_server_id(old_server_id, patch.server_id)
 
-            if patch.dns is not None:
-                try:
-                    info = self._probe.ask_server(patch.dns)
-                    if info:
-                        self._repo.update(servidor_id, ServidorPatch(
-                            hostname=info.hostname,
-                            pretty_os=info.pretty_os,
-                            arch=info.arch,
-                            kernel=info.kernel,
-                        ))
-                except Exception:
-                    pass
+        if patch.dns is not None:
+            try:
+                info = self._probe.ask_server(patch.dns)
+                if info:
+                    self._repo.update(servidor_id, ServidorPatch(
+                        hostname=info.hostname,
+                        pretty_os=info.pretty_os,
+                        arch=info.arch,
+                        kernel=info.kernel,
+                    ))
+            except Exception:
+                pass
 
-        return updated
-
-    def delete(self, servidor_id: int, section_ids: set[int] | None = None) -> bool:
+    def delete(self, servidor_id: int, section_ids: set[int] | None = None) -> None:
         """
         Elimina un servidor de MariaDB y limpia sus métricas en MongoDB.
 
         Aplica el filtro de sección antes de eliminar. Recupera el `server_id`
         antes del delete porque tras él el registro ya no existe y no puede
-        consultarse. La limpieza de MongoDB solo se ejecuta si el delete en
-        MariaDB tuvo éxito y se conoce el `server_id`.
+        consultarse.
 
         Args:
             servidor_id: PK del servidor a eliminar.
             section_ids: Secciones visibles, o `None` para superadmin.
 
-        Retorna:
-            `True` si el servidor existía y fue eliminado; `False` si no
-            existe o no es visible.
+        Lanza:
+            `NotFoundException` si el servidor no existe o no es visible.
         """
         if section_ids is not None:
             current_seccion = self._repo.find_seccion_id_by_id(servidor_id)
             if current_seccion is None or current_seccion not in section_ids:
-                return False
+                raise NotFoundException(f"Servidor con id={servidor_id} no encontrado")
         server_id = self._repo.find_server_id_by_id(servidor_id)
-        deleted = self._repo.delete(servidor_id)
-        if deleted and server_id:
+        if not self._repo.delete(servidor_id):
+            raise NotFoundException(f"Servidor con id={servidor_id} no encontrado")
+        if server_id:
             self._mongo.delete_by_server_id(server_id)
-        return deleted
 
     def delete_bulk(self, ids: list[int], section_ids: set[int] | None = None) -> BulkResult:
         """
@@ -434,18 +411,14 @@ class ServidorService:
 
     def add_servicios(
         self, servidor_id: int, servicio_ids: list[int], section_ids: set[int] | None = None
-    ) -> int | None:
+    ) -> int:
         """
         Asocia servicios a un servidor, con filtro de sección.
 
         La comprobación de visibilidad varía según `section_ids`:
           - Si no es `None`: busca la sección actual del servidor y verifica
-            que está en `section_ids`. Más preciso que `exists()`.
-          - Si es `None` (superadmin): comprueba solo existencia con
-            `self._repo.exists(servidor_id)`.
-
-        Devuelve `None` para señalizar "servidor no encontrado o no accesible"
-        al router, que lo convierte en `HTTP 404`.
+            que está en `section_ids`.
+          - Si es `None` (superadmin): comprueba solo existencia.
 
         Args:
             servidor_id:  PK del servidor.
@@ -453,26 +426,26 @@ class ServidorService:
             section_ids:  Secciones visibles, o `None` para superadmin.
 
         Retorna:
-            Número de IDs enviados (no de filas insertadas, por `INSERT IGNORE`),
-            o `None` si el servidor no existe o no es accesible.
+            Número de IDs enviados (no de filas insertadas, por `INSERT IGNORE`).
+
+        Lanza:
+            `NotFoundException` si el servidor no existe o no es accesible.
         """
         if section_ids is not None:
             current_seccion = self._repo.find_seccion_id_by_id(servidor_id)
             if current_seccion is None or current_seccion not in section_ids:
-                return None
+                raise NotFoundException(f"Servidor con id={servidor_id} no encontrado")
         elif not self._repo.exists(servidor_id):
-            return None
+            raise NotFoundException(f"Servidor con id={servidor_id} no encontrado")
         return self._repo.add_servicios(servidor_id, servicio_ids)
 
     def remove_servicios(
         self, servidor_id: int, servicio_ids: list[int], section_ids: set[int] | None = None
-    ) -> int | None:
+    ) -> int:
         """
         Desasocia servicios de un servidor, con filtro de sección.
 
-        Mismo patrón de visibilidad que `add_servicios`. Devuelve el número
-        de filas realmente eliminadas de `servidores_servicios`, o `None` si
-        el servidor no existe o no es accesible.
+        Mismo patrón de visibilidad que `add_servicios`.
 
         Args:
             servidor_id:  PK del servidor.
@@ -480,15 +453,17 @@ class ServidorService:
             section_ids:  Secciones visibles, o `None` para superadmin.
 
         Retorna:
-            Número de asociaciones eliminadas, o `None` si el servidor no
-            existe o no es accesible.
+            Número de asociaciones eliminadas.
+
+        Lanza:
+            `NotFoundException` si el servidor no existe o no es accesible.
         """
         if section_ids is not None:
             current_seccion = self._repo.find_seccion_id_by_id(servidor_id)
             if current_seccion is None or current_seccion not in section_ids:
-                return None
+                raise NotFoundException(f"Servidor con id={servidor_id} no encontrado")
         elif not self._repo.exists(servidor_id):
-            return None
+            raise NotFoundException(f"Servidor con id={servidor_id} no encontrado")
         return self._repo.remove_servicios(servidor_id, servicio_ids)
 
     # ── Foto ───────────────────────────────────────────────────────────────────
@@ -550,20 +525,13 @@ class ServidorService:
 
     def get_metrics(
         self, server_id: str, minutes: int = 60, section_ids: set[int] | None = None
-    ) -> list[dict] | None:
+    ) -> list[dict]:
         """
         Devuelve métricas de MongoDB para un servidor, con filtro de sección.
 
         El parámetro es `server_id: str` (ID externo del agente), no
         `servidor_id: int` (PK de MariaDB). Para aplicar el filtro de sección,
-        primero resuelve la sección del servidor en MariaDB usando el
-        `server_id` externo, y solo si es visible consulta MongoDB.
-
-        Tres valores de retorno con semántica distinta:
-          - `None`      → servidor no existe en MariaDB o no es visible.
-          - `[]`        → servidor existe y es visible, pero sin métricas en
-                          la ventana de tiempo solicitada.
-          - `list[dict]`→ lista de documentos de métricas en orden cronológico.
+        primero resuelve la sección del servidor en MariaDB.
 
         Args:
             server_id:   Identificador externo del servidor (string).
@@ -571,13 +539,17 @@ class ServidorService:
             section_ids: Secciones visibles, o `None` para superadmin.
 
         Retorna:
-            Lista de documentos dict, lista vacía, o `None` según lo indicado.
+            Lista de documentos dict (puede ser vacía si no hay métricas en
+            la ventana de tiempo solicitada).
+
+        Lanza:
+            `NotFoundException` si el servidor no existe en MariaDB o no es visible.
         """
         seccion_id = self._repo.find_seccion_id_by_server_id(server_id)
-        if seccion_id is None:
-            return None
-        if section_ids is not None and seccion_id not in section_ids:
-            return None  # treated as not-found
+        if seccion_id is None or (
+            section_ids is not None and seccion_id not in section_ids
+        ):
+            raise NotFoundException(f"Servidor '{server_id}' no encontrado")
         return self._mongo.get_metrics(server_id, minutes)
 
     # ── Helpers ────────────────────────────────────────────────────────────────

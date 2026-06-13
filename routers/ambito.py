@@ -54,7 +54,7 @@ Organización:
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query
 from sqlmodel import Session
 
 from core.database import get_session
@@ -124,12 +124,10 @@ def get_by_id(
     Requiere el permiso `AUDIT_SYS`. Si el ámbito con el ID indicado no existe,
     devuelve `HTTP 404` con el mensaje "Ámbito no encontrado".
 
-    A diferencia de otros routers del proyecto que capturan una `NotFoundException`
-    lanzada por el servicio (gestionada por el handler global en
-    `exceptions/handlers.py`), este endpoint comprueba el retorno `None` del
-    servicio y lanza `HTTPException` directamente. Ambos enfoques producen el
-    mismo contrato HTTP `{"error": "NOT_FOUND", "message": "..."}` a través del
-    handler, pero este es más explícito en el cuerpo del endpoint.
+    Si el ámbito no existe, `AmbitoService.get_by_id` lanza `NotFoundException`,
+    que el handler global de `exceptions/handlers.py` traduce a una respuesta
+    HTTP 404 con el contrato `{"error": "NOT_FOUND", "message": "..."}`.
+
 
     Args:
         ambito_id: Clave primaria del ámbito a recuperar.
@@ -145,7 +143,4 @@ def get_by_id(
         404 Not Found    — no existe un ámbito con `ambito_id`.
     """
     service = AmbitoService(session)
-    ambito = service.get_by_id(ambito_id)
-    if ambito is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ámbito no encontrado")
-    return ambito
+    return service.get_by_id(ambito_id)

@@ -58,7 +58,7 @@ Organización:
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlmodel import Session
 
 from core.database import get_session
@@ -126,10 +126,7 @@ def find_by_id(
         404 Not Found    — no existe una sección con `seccion_id`.
     """
     service = SeccionService(session)
-    seccion = service.find_by_id(seccion_id)
-    if seccion is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sección no encontrada")
-    return seccion
+    return service.find_by_id(seccion_id)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED, response_model=IdResponse)
@@ -200,8 +197,7 @@ def update(
         422 Unprocessable — body inválido (validación Pydantic).
     """
     service = SeccionService(session)
-    if not service.update(seccion_id, patch):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sección no encontrada")
+    service.update(seccion_id, patch)
 
 
 @router.delete("/{seccion_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -235,5 +231,4 @@ def delete(
                             (gestionado por el handler global de `IntegrityError`).
     """
     service = SeccionService(session)
-    if not service.delete(seccion_id):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sección no encontrada")
+    service.delete(seccion_id)

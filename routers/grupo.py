@@ -131,10 +131,7 @@ def get_by_id(
         404 Not Found    — no existe un grupo con `grupo_id`.
     """
     svc = GrupoService(session)
-    grupo = svc.get_by_id(grupo_id)
-    if grupo is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grupo no encontrado")
-    return grupo
+    return svc.get_by_id(grupo_id)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED, response_model=BulkResult)
@@ -213,12 +210,7 @@ def update(
                                 (ValueError del servicio), o body inválido (Pydantic).
     """
     svc = GrupoService(session)
-    try:
-        found = svc.patch(grupo_id, patch)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
-    if not found:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grupo no encontrado")
+    svc.patch(grupo_id, patch)
     return svc.get_by_id(grupo_id)
 
 
@@ -275,8 +267,7 @@ def set_superadmin(
         )
 
     svc = GrupoService(session)
-    if not svc.patch_superadmin(grupo_id, body.superadmin):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grupo no encontrado")
+    svc.patch_superadmin(grupo_id, body.superadmin)
     return svc.get_by_id(grupo_id)
 
 
@@ -307,5 +298,4 @@ def delete(
         404 Not Found    — no existe un grupo con `grupo_id`.
     """
     svc = GrupoService(session)
-    if not svc.delete(grupo_id):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grupo no encontrado")
+    svc.delete(grupo_id)

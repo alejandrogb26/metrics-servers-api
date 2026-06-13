@@ -55,11 +55,11 @@ Organización:
 
 import logging
 
-from fastapi import HTTPException, status
 from sqlmodel import Session
 
 from core.security import create_access_token
 from core.config import get_settings
+from exceptions.errors import UnauthorizedException
 from models.common import LoginRequest, LoginResponse, SessionResponse
 from models.usuario import UsuarioApp
 from repositories.auth_repo import AuthRepository
@@ -91,7 +91,7 @@ class AuthService:
         Autentica al usuario y devuelve el JWT junto con los datos de sesión.
 
         Ejecuta siete pasos en secuencia. Cualquier fallo en los pasos 1-3
-        eleva un `HTTPException` y aborta el flujo sin emitir token.
+        lanza una `UnauthorizedException` y aborta el flujo sin emitir token.
 
         Paso 1 — Validar campos obligatorios:
             Comprueba que `username` y `password` no están vacíos. Esta
@@ -143,29 +143,22 @@ class AuthService:
             `LoginResponse` con `token` (JWT Bearer), `tokenType`, `expiresIn`
             (segundos) y `session` (datos del usuario y sus permisos).
 
-        Errores HTTP:
-            422 Unprocessable — username o password vacíos.
-            401 Unauthorized  — credenciales LDAP incorrectas, o usuario sin
-                                grupo autorizado en el sistema.
+        Lanza:
+            `UnauthorizedException` — username/password vacíos, credenciales LDAP
+                                      incorrectas, o usuario sin grupo autorizado.
         """
         log.debug("LOGIN inicio username=%s", request.username)
 
         # 1. Validar campos obligatorios
         if not request.username or not request.password:
             log.debug("LOGIN error: username o password vacíos")
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Username y password son obligatorios",
-            )
+            raise UnauthorizedException("Username y password son obligatorios")
 
         # 2. Autenticar en LDAP
         ad_user = self._ldap.authenticate(request.username, request.password)
         if ad_user is None:
             log.debug("LOGIN ldap_fail username=%s", request.username)
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Credenciales inválidas",
-            )
+            raise UnauthorizedException("Credenciales inválidas")
         log.debug("LOGIN ldap_ok username=%s display_name=%s mail=%s groups_count=%d",
                   ad_user.sam_account_name, ad_user.display_name,
                   ad_user.mail, len(ad_user.member_of))
@@ -176,10 +169,7 @@ class AuthService:
         if grupo is None:
             log.debug("LOGIN group_not_found username=%s member_of=%s",
                       ad_user.sam_account_name, ad_user.member_of)
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="El usuario no pertenece a ningún grupo autorizado",
-            )
+            raise UnauthorizedException("El usuario no pertenece a ningún grupo autorizado")
         log.debug("LOGIN group_resolved username=%s grupo_id=%s grupo_nombre=%s superadmin=%s",
                   ad_user.sam_account_name, grupo.id, getattr(grupo, "nombre", "?"),
                   grupo.superadmin)

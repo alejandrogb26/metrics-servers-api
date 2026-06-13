@@ -41,6 +41,7 @@ Organización:
 
 from sqlmodel import Session
 
+from exceptions.errors import NotFoundException
 from models.permiso import PermisoRead
 from repositories.permiso_repo import PermisoRepository
 
@@ -82,18 +83,20 @@ class PermisoService:
         offset = page * size
         return self._repo.find_all(offset=offset, limit=size)
 
-    def get_by_id(self, permiso_id: int) -> PermisoRead | None:
+    def get_by_id(self, permiso_id: int) -> PermisoRead:
         """
         Busca un permiso por su clave primaria y lo devuelve con el ámbito embebido.
-
-        Propaga `None` del repositorio si el permiso no existe, para que el
-        router pueda elevar `HTTP 404` sin que el servicio conozca el protocolo
-        HTTP.
 
         Args:
             permiso_id: Clave primaria del permiso a recuperar.
 
         Retorna:
-            `PermisoRead` con ámbito embebido si existe, `None` si no.
+            `PermisoRead` con ámbito embebido.
+
+        Lanza:
+            `NotFoundException` si no existe un permiso con `permiso_id`.
         """
-        return self._repo.find_by_id(permiso_id)
+        permiso = self._repo.find_by_id(permiso_id)
+        if permiso is None:
+            raise NotFoundException(f"Permiso con id={permiso_id} no encontrado")
+        return permiso

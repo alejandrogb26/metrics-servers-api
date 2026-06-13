@@ -128,10 +128,7 @@ def find_by_id(
         404 Not Found    — no existe un servicio con `servicio_id`.
     """
     svc = ServicioService(session)
-    result = svc.find_by_id(servicio_id)
-    if result is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Servicio no encontrado")
-    return result
+    return svc.find_by_id(servicio_id)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED, response_model=IdResponse)
@@ -204,8 +201,7 @@ def update(
         422 Unprocessable — body inválido (validación Pydantic).
     """
     svc = ServicioService(session)
-    if not svc.update(servicio_id, patch):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Servicio no encontrado")
+    svc.update(servicio_id, patch)
 
 
 @router.post("/{servicio_id}/logo", response_model=UploadResult)
@@ -257,8 +253,7 @@ async def upload_logo(
         404 Not Found    — no existe un servicio con `servicio_id`.
     """
     svc = ServicioService(session)
-    if svc.find_by_id(servicio_id) is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Servicio no encontrado")
+    svc.find_by_id(servicio_id)  # raises NotFoundException if not found
     if not file.filename:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Archivo no proporcionado")
     data = await file.read()
@@ -295,5 +290,4 @@ def delete(
         404 Not Found    — no existe un servicio con `servicio_id`.
     """
     svc = ServicioService(session)
-    if not svc.delete(servicio_id):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Servicio no encontrado")
+    svc.delete(servicio_id)
